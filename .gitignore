@@ -1,0 +1,21 @@
+# Chrome 확장 프로그램 패키징 산출물 (특히 .pem은 절대 커밋 금지: 확장 업데이트 서명 개인키)
+*.pem
+*.crx
+*.zip
+
+# 로컬 환경/에디터
+.env
+.env.*
+.vscode/
+.idea/
+*.log
+
+# OS 파일
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 향후 빌드 도구를 추가할 경우 대비
+node_modules/
+dist/
+build/
