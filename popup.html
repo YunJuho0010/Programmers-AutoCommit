@@ -30,11 +30,10 @@
     gap: 8px;
     margin-bottom: 14px;
   }
-  .logo-dot {
+  .logo-icon {
     width: 22px;
     height: 22px;
     border-radius: 7px;
-    background: var(--accent);
     flex: none;
   }
   .header h1 {
@@ -150,36 +149,6 @@
   .clear-all:hover { color: var(--err); }
   .hidden { display: none !important; }
 
-  .error-card {
-    position: relative;
-    margin-top: 8px;
-    border-radius: 10px;
-    padding: 10px 28px 10px 12px;
-    font-size: 12px;
-    background: var(--err-bg);
-    color: var(--err);
-    border: 1px solid #fecaca;
-    display: none;
-    white-space: pre-wrap;
-  }
-  .error-card.show { display: block; }
-  .error-card .dismiss-btn {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 18px;
-    height: 18px;
-    border: none;
-    background: transparent;
-    color: var(--err);
-    font-size: 13px;
-    line-height: 1;
-    cursor: pointer;
-    border-radius: 4px;
-    padding: 0;
-  }
-  .error-card .dismiss-btn:hover { background: rgba(0, 0, 0, 0.08); }
-
   .options-btn {
     display: block;
     text-align: center;
@@ -199,7 +168,7 @@
 <body>
   <div class="wrap">
     <div class="header">
-      <div class="logo-dot"></div>
+      <img src="icons/icon48.png" alt="" class="logo-icon" />
       <h1>프로그래머스 오토커밋</h1>
     </div>
 
@@ -214,10 +183,6 @@
     <div id="emptyState" class="card">최근 실행/제출된 기록이 없습니다.</div>
     <div id="historyList" class="history-list hidden"></div>
     <button type="button" id="clearAll" class="clear-all hidden">모두 지우기</button>
-    <div id="errorInfo" class="error-card">
-      <span id="errorText"></span>
-      <button type="button" id="dismissError" class="dismiss-btn" title="오류 지우기">×</button>
-    </div>
 
     <a href="#" id="openOptions" class="options-btn">설정</a>
   </div>

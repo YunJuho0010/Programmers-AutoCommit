@@ -2,9 +2,6 @@ const enabledEl = document.getElementById("enabled");
 const emptyStateEl = document.getElementById("emptyState");
 const historyListEl = document.getElementById("historyList");
 const clearAllEl = document.getElementById("clearAll");
-const errorInfoEl = document.getElementById("errorInfo");
-const errorTextEl = document.getElementById("errorText");
-const dismissErrorEl = document.getElementById("dismissError");
 
 const STATUS_LABEL = {
   passed: "✅ 테스트 통과",
@@ -56,13 +53,8 @@ async function clearAllHistory() {
   render();
 }
 
-async function dismissError() {
-  await chrome.storage.local.remove("lastError");
-  render();
-}
-
 async function render() {
-  const { enabled, lastError } = await chrome.storage.local.get(["enabled", "lastError"]);
+  const { enabled } = await chrome.storage.local.get("enabled");
   enabledEl.checked = enabled !== false;
 
   const history = await getHistory();
@@ -81,13 +73,6 @@ async function render() {
       historyListEl.appendChild(buildHistoryItem(entry));
     });
   }
-
-  if (lastError) {
-    errorTextEl.textContent = `최근 오류: ${lastError}`;
-    errorInfoEl.classList.add("show");
-  } else {
-    errorInfoEl.classList.remove("show");
-  }
 }
 
 enabledEl.addEventListener("change", () => {
@@ -95,7 +80,6 @@ enabledEl.addEventListener("change", () => {
 });
 
 clearAllEl.addEventListener("click", clearAllHistory);
-dismissErrorEl.addEventListener("click", dismissError);
 
 document.getElementById("openOptions").addEventListener("click", (e) => {
   e.preventDefault();

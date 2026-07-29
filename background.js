@@ -58,7 +58,11 @@ async function getFile(settings, path) {
   return { sha: json.sha, text: base64ToUtf8(json.content) };
 }
 
-async function putFile(settings, path, content, message, knownSha, retriesLeft = 2) {
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function putFile(settings, path, content, message, knownSha, retriesLeft = 4) {
   const sha = knownSha !== undefined ? knownSha : (await getFile(settings, path))?.sha;
   const url = `${GITHUB_API}/repos/${settings.owner}/${settings.repo}/contents/${encodeURIComponent(
     path
@@ -78,8 +82,10 @@ async function putFile(settings, path, content, message, knownSha, retriesLeft =
   if (res.ok) return res.json();
 
   // 다른 커밋이 그 사이 같은 파일을 먼저 바꿔서 sha가 어긋난 경우(409),
-  // 최신 sha를 다시 받아와서 재시도한다.
+  // 잠깐 대기했다가 최신 sha를 다시 받아와서 재시도한다. 대기 시간을 매번 조금씩
+  // 늘려서(지수 백오프) 계속 겹치는 걸 줄인다.
   if (res.status === 409 && retriesLeft > 0) {
+    await wait(200 + Math.random() * 200 * (5 - retriesLeft));
     const fresh = await getFile(settings, path);
     return putFile(settings, path, content, message, fresh?.sha, retriesLeft - 1);
   }
@@ -276,8 +282,8 @@ function enqueueCommit(run) {
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type !== "PROGRAMMERS_RUN") return;
+  // 실패해도 사용자에게 알리지 않고 콘솔에만 남긴다 (다음 실행/제출 때 다시 시도됨).
   enqueueCommit(message).catch((err) => {
     console.error("[프로그래머스 오토커밋]", err);
-    chrome.storage.local.set({ lastError: String(err.message || err) });
   });
 });
