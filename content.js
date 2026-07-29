@@ -1,4 +1,4 @@
-// 프로그래머스 문제 페이지에 주입되어 "실행" 버튼 클릭을 감지하고,
+// 프로그래머스 문제 페이지에 주입되어 "코드 실행" / "제출 후 채점하기" 버튼 클릭을 감지하고,
 // 문제 정보 + 현재 코드 + 실행 결과를 모아 background로 전달한다.
 
 const LANGUAGE_EXTENSIONS = {
@@ -29,6 +29,14 @@ function getLessonMeta() {
   };
 }
 
+// breadcrumb의 가운데 항목(예: "탐욕법(Greedy)", "완전탐색", "연습문제", "2025 카카오 하반기 2차")을
+// 문제 목록 페이지에 표시되는 태그와 동일한 값으로 사용해 폴더 분류에 쓴다.
+function getTopic() {
+  const items = document.querySelectorAll(".breadcrumb li");
+  if (items.length < 2) return "";
+  return items[items.length - 2].textContent.trim();
+}
+
 function getLanguage() {
   const el = document.querySelector("[data-language]");
   const lang = el ? el.dataset.language : "";
@@ -43,12 +51,22 @@ function getDescriptionMarkdown() {
   return domToMarkdown(guide);
 }
 
+// content.js는 격리된 JS 세계에서 실행되어 페이지의 CodeMirror 인스턴스에 직접 접근할 수
+// 없다. page-bridge.js(메인 world에 주입됨)에게 커스텀 이벤트로 요청해서 코드 값을 받아온다.
 function getCurrentCode() {
-  const cmHost = document.querySelector(".CodeMirror");
-  if (cmHost && cmHost.CodeMirror) {
-    return cmHost.CodeMirror.getValue();
-  }
-  return "";
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(""), 1000);
+    window.addEventListener(
+      "programmers-autocommit:get-code-response",
+      function handler(e) {
+        clearTimeout(timeout);
+        window.removeEventListener("programmers-autocommit:get-code-response", handler);
+        resolve(e.detail.code);
+      },
+      { once: true }
+    );
+    window.dispatchEvent(new Event("programmers-autocommit:get-code-request"));
+  });
 }
 
 function findActionButton(label) {
@@ -65,14 +83,32 @@ function getResultText() {
   return section.innerText.trim();
 }
 
-const FAIL_KEYWORDS = ["실패", "에러", "초과", "Error", "Fail"];
+const FAIL_KEYWORDS = ["실패", "에러", "초과", "다릅니다", "Error", "Fail"];
+const RUN_SUMMARY_PATTERN = /(\d+)\s*개\s*중\s*(\d+)\s*개\s*성공/;
+const SUBMIT_SCORE_PATTERN = /합계\s*[:：]?\s*([\d.]+)\s*\/\s*([\d.]+)/;
 
-// "실행" 결과 텍스트만으로 통과 여부를 추정한다. 예제 테스트케이스 기준이며
-// 프로그래머스의 정식 채점(제출) 결과와는 다를 수 있는 근사치다.
-function detectRunStatus(resultText) {
+// 결과 패널 텍스트만으로 통과 여부를 추정한다. "코드 실행"과 "제출 후 채점하기"는
+// 결과 형식이 서로 달라서 각각의 요약 패턴을 우선 확인하고, 둘 다 없으면
+// 실패 키워드로 보수적으로 판단한다 (확신 없으면 unknown).
+function detectStatus(resultText) {
   if (!resultText) return "unknown";
+
+  const submitScore = resultText.match(SUBMIT_SCORE_PATTERN);
+  if (submitScore) {
+    const score = Number(submitScore[1]);
+    const total = Number(submitScore[2]);
+    return total > 0 && score >= total ? "passed" : "failed";
+  }
+
+  const runSummary = resultText.match(RUN_SUMMARY_PATTERN);
+  if (runSummary) {
+    const total = Number(runSummary[1]);
+    const success = Number(runSummary[2]);
+    return total > 0 && success === total ? "passed" : "failed";
+  }
+
   if (FAIL_KEYWORDS.some((keyword) => resultText.includes(keyword))) return "failed";
-  return "passed";
+  return "unknown";
 }
 
 function waitForSpinnerToClear(timeoutMs = 20000) {
@@ -131,14 +167,19 @@ async function isExtensionEnabled() {
   return enabled !== false; // 기본값 켜짐
 }
 
-async function handleRunClick() {
+const TRIGGER_BUTTONS = [
+  { label: "코드 실행", action: "run" },
+  { label: "제출 후 채점하기", action: "submit" },
+];
+
+async function handleActionClick(action) {
   if (!(await isExtensionEnabled())) return;
 
   const meta = getLessonMeta();
   if (!meta || !meta.lessonId) return;
 
   const language = getLanguage();
-  const codeAtClick = getCurrentCode();
+  const codeAtClick = await getCurrentCode();
   const description = getDescriptionMarkdown();
 
   await waitForSpinnerToClear();
@@ -147,16 +188,17 @@ async function handleRunClick() {
 
   const payload = {
     type: "PROGRAMMERS_RUN",
+    action,
     lessonId: meta.lessonId,
     title: meta.title,
     level: meta.level,
-    category: meta.category,
+    category: getTopic() || meta.category,
     language: language.key,
     extension: language.extension,
     code: codeAtClick,
     description,
     resultText,
-    status: detectRunStatus(resultText),
+    status: detectStatus(resultText),
     url: location.href,
     timestamp: new Date().toISOString(),
   };
@@ -164,18 +206,20 @@ async function handleRunClick() {
   chrome.runtime.sendMessage(payload);
 }
 
-function attachRunListener() {
-  const btn = findActionButton("실행");
-  if (btn && !btn.dataset.autocommitBound) {
-    btn.dataset.autocommitBound = "1";
-    btn.addEventListener("click", () => {
-      // 사이트 자체 핸들러와 경쟁하지 않도록 다음 tick에서 처리 시작.
-      setTimeout(handleRunClick, 0);
-    });
+function attachTriggerListeners() {
+  for (const { label, action } of TRIGGER_BUTTONS) {
+    const btn = findActionButton(label);
+    if (btn && !btn.dataset.autocommitBound) {
+      btn.dataset.autocommitBound = "1";
+      btn.addEventListener("click", () => {
+        // 사이트 자체 핸들러와 경쟁하지 않도록 다음 tick에서 처리 시작.
+        setTimeout(() => handleActionClick(action), 0);
+      });
+    }
   }
 }
 
 // 버튼 영역이 클라이언트 사이드에서 늦게 렌더링될 수 있어 주기적으로 재확인한다.
-attachRunListener();
-const bootObserver = new MutationObserver(attachRunListener);
+attachTriggerListeners();
+const bootObserver = new MutationObserver(attachTriggerListeners);
 bootObserver.observe(document.body, { childList: true, subtree: true });

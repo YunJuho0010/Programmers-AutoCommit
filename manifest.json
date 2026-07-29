@@ -19,6 +19,12 @@
   "content_scripts": [
     {
       "matches": ["https://school.programmers.co.kr/learn/courses/*/lessons/*"],
+      "js": ["page-bridge.js"],
+      "world": "MAIN",
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://school.programmers.co.kr/learn/courses/*/lessons/*"],
       "js": ["markdown.js", "content.js"],
       "run_at": "document_idle"
     }

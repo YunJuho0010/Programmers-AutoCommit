@@ -58,7 +58,7 @@ async function getFile(settings, path) {
   return { sha: json.sha, text: base64ToUtf8(json.content) };
 }
 
-async function putFile(settings, path, content, message, knownSha) {
+async function putFile(settings, path, content, message, knownSha, retriesLeft = 2) {
   const sha = knownSha !== undefined ? knownSha : (await getFile(settings, path))?.sha;
   const url = `${GITHUB_API}/repos/${settings.owner}/${settings.repo}/contents/${encodeURIComponent(
     path
@@ -75,26 +75,51 @@ async function putFile(settings, path, content, message, knownSha) {
     headers: githubHeaders(settings.token),
     body: JSON.stringify(body),
   });
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`GitHub 커밋 실패 (${res.status}): ${errText}`);
+  if (res.ok) return res.json();
+
+  // 다른 커밋이 그 사이 같은 파일을 먼저 바꿔서 sha가 어긋난 경우(409),
+  // 최신 sha를 다시 받아와서 재시도한다.
+  if (res.status === 409 && retriesLeft > 0) {
+    const fresh = await getFile(settings, path);
+    return putFile(settings, path, content, message, fresh?.sha, retriesLeft - 1);
   }
-  return res.json();
+
+  const errText = await res.text();
+  throw new Error(`GitHub 커밋 실패 (${res.status}): ${errText}`);
 }
 
 function safeFolderName(name) {
   return name.replace(/[\\/:*?"<>|]/g, "_").trim();
 }
 
+function getCategoryFolder(run) {
+  return safeFolderName(run.category || "algorithm");
+}
+
 function buildBasePath(run) {
   const level = run.level ? `Lv${run.level}` : "미분류";
-  const category = run.category || "algorithm";
-  const folder = safeFolderName(`${run.lessonId}-${run.title}`);
-  return `programmers/${category}/${level}/${folder}`;
+  const folder = safeFolderName(`[${level}][${run.lessonId}] ${run.title}`);
+  return `programmers/${getCategoryFolder(run)}/${folder}`;
+}
+
+async function ensureCategoryReadme(settings, run, message) {
+  const categoryFolder = getCategoryFolder(run);
+  const path = `programmers/${categoryFolder}/README.md`;
+  const content = `### ${categoryFolder}\n`;
+
+  const existing = await getFile(settings, path);
+  if (existing && existing.text === content) return;
+  await putFile(settings, path, content, message, existing?.sha);
 }
 
 function buildReadme(run) {
   const status = STATUS_LABEL[run.status] || STATUS_LABEL.unknown;
+  const actionLabel = run.action === "submit" ? "제출 후 채점하기" : "코드 실행";
+  const caveat =
+    run.action === "submit"
+      ? "> 상태는 프로그래머스 정식 채점(제출) 결과 기준입니다."
+      : '> 상태는 "코드 실행" 결과(예제 테스트케이스) 기준 추정치이며, 정식 채점(제출) 결과와 다를 수 있습니다.';
+
   const lines = [
     `# ${run.title}`,
     "",
@@ -104,19 +129,19 @@ function buildReadme(run) {
     `- 문제 링크: ${run.url}`,
     `- 상태: ${status}`,
     "",
-    "> 상태는 \"실행\" 버튼 결과(예제 테스트케이스) 기준 추정치이며, 프로그래머스 정식 채점(제출) 결과와 다를 수 있습니다.",
+    caveat,
     "",
     "## 문제 설명",
     "",
     run.description || "(설명을 불러오지 못했습니다)",
     "",
-    "## 마지막 실행 결과",
+    `## 마지막 ${actionLabel} 결과`,
     "",
     "```",
     run.resultText || "(결과 없음)",
     "```",
     "",
-    `_마지막 실행: ${run.timestamp}_`,
+    `_마지막 ${actionLabel}: ${run.timestamp}_`,
   ];
   return lines.join("\n");
 }
@@ -221,8 +246,10 @@ async function commitRun(run) {
   const basePath = buildBasePath(run);
   const readmePath = `${basePath}/README.md`;
   const codePath = `${basePath}/solution.${run.extension}`;
-  const message = `[프로그래머스] ${run.title} (Lv.${run.level || "?"}) 실행`;
+  const actionLabel = run.action === "submit" ? "제출" : "실행";
+  const message = `[${actionLabel}] ${run.title}`;
 
+  await ensureCategoryReadme(settings, run, message);
   await putFile(settings, readmePath, buildReadme(run), message);
   await putFile(settings, codePath, run.code || "", message);
   await updateIndex(settings, run, basePath, message);

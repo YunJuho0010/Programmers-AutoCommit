@@ -104,6 +104,13 @@
     color: var(--ink);
   }
   .howto a { color: var(--accent); }
+  .step-hint {
+    margin: 0 0 16px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--sub);
+  }
+  .step-hint a { color: var(--accent); }
   .actions {
     display: flex;
     gap: 8px;
@@ -172,6 +179,26 @@
     padding: 1px 5px;
     border-radius: 4px;
   }
+  .faq-img-toggle {
+    margin: 4px 0 8px;
+  }
+  .faq-img-toggle summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 12.5px;
+    list-style: none;
+  }
+  .faq-img-toggle summary::-webkit-details-marker { display: none; }
+  .faq-img-toggle summary::before { content: "▸ "; }
+  .faq-img-toggle[open] summary::before { content: "▾ "; }
+  .faq-img-toggle img {
+    display: block;
+    margin-top: 8px;
+    max-width: 100%;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
   .toast-container {
     position: fixed;
     bottom: 24px;
@@ -217,12 +244,10 @@
       <h2>GitHub 토큰 발급</h2>
     </div>
 
-    <ol class="howto">
-      <li><a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener">GitHub 토큰 발급 페이지</a>로 이동</li>
-      <li>Repository access → &quot;Only select repositories&quot; → 커밋 받을 저장소 선택</li>
-      <li>Permissions → Repository permissions → <b>Contents</b> → &quot;Read and write&quot; 선택</li>
-      <li>만료 기간을 짧게 설정하고 생성 → 나온 토큰을 복사해서 아래 칸에 붙여넣기</li>
-    </ol>
+    <p class="step-hint">
+      <a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener">GitHub 토큰 발급 페이지</a>에서
+      토큰을 만들어 아래에 붙여넣으세요. 발급 방법이 헷갈리면 아래 &quot;자주 묻는 질문&quot;을 참고하세요.
+    </p>
 
     <label for="token">Personal Access Token</label>
     <div class="row">
@@ -257,10 +282,18 @@
       <div class="faq-a">
         <ol>
           <li><a href="https://github.com/settings/tokens?type=beta" target="_blank" rel="noopener">GitHub 토큰 발급 페이지</a>로 이동</li>
+          <li>좌측 메뉴에서 &quot;Personal access tokens&quot; → &quot;Fine-grained tokens&quot; 선택 (이미 그 화면이면 건너뛰기)</li>
+          <li>우측 상단 &quot;Generate new token&quot; 버튼 클릭</li>
           <li>Repository access → &quot;Only select repositories&quot; → 커밋 받을 저장소 선택</li>
-          <li>Permissions → Repository permissions → <b>Contents</b> → &quot;Read and write&quot; 선택</li>
-          <li>만료 기간을 짧게 설정하고 생성 → 나온 토큰을 복사해서 위 칸에 붙여넣기</li>
+          <li>&quot;Permissions&quot; 섹션 → &quot;Repositories&quot; 탭에서 &quot;Add permissions&quot; 버튼 클릭</li>
+      <li>목록/검색창에서 <b>Contents</b> 선택 → 추가된 항목의 드롭다운에서 &quot;Read and write&quot; 선택</li>
+      <li>이때 <b>Metadata</b> 권한이 &quot;Required&quot;로 자동 추가되는데, GitHub이 요구하는 필수 항목이라 그대로 두면 됩니다</li>
+          <li>맨 아래로 스크롤 → 만료 기간을 짧게 설정 → &quot;Generate token&quot; 클릭 → 나온 토큰을 복사해서 위 칸에 붙여넣기</li>
         </ol>
+        <details class="faq-img-toggle">
+          <summary>이미지로 보기 (Contents 권한 설정 화면)</summary>
+          <img src="images/token-permissions.png" alt="Permissions 섹션에서 Contents를 Read and write로 설정하는 화면" />
+        </details>
         <p>토큰은 이 화면을 나가면 GitHub에서 다시 보여주지 않으니, 놓쳤다면 새로 발급하면 됩니다.</p>
       </div>
     </div>
