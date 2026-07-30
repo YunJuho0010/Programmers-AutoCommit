@@ -162,9 +162,13 @@ function waitForSpinnerToClear(timeoutMs = 20000) {
   });
 }
 
-async function isExtensionEnabled() {
-  const { enabled } = await chrome.storage.local.get("enabled");
-  return enabled !== false; // 기본값 켜짐
+async function isActionAllowed(action) {
+  const { enabled, commitTrigger } = await chrome.storage.local.get(["enabled", "commitTrigger"]);
+  if (enabled === false) return false;
+
+  const trigger = commitTrigger || "submit"; // 기본값 제출시
+  if (trigger === "both") return true;
+  return trigger === action;
 }
 
 const TRIGGER_BUTTONS = [
@@ -173,7 +177,7 @@ const TRIGGER_BUTTONS = [
 ];
 
 async function handleActionClick(action) {
-  if (!(await isExtensionEnabled())) return;
+  if (!(await isActionAllowed(action))) return;
 
   const meta = getLessonMeta();
   if (!meta || !meta.lessonId) return;

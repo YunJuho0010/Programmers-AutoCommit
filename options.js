@@ -42,32 +42,44 @@ async function load() {
     "githubToken",
     "repoOwner",
     "repoName",
+    "repoUrlDraft",
     "branch",
   ]);
   tokenEl.value = data.githubToken || "";
   branchEl.value = data.branch || "main";
-  if (data.repoOwner && data.repoName) {
+  if (data.repoUrlDraft !== undefined) {
+    repoUrlEl.value = data.repoUrlDraft;
+  } else if (data.repoOwner && data.repoName) {
     repoUrlEl.value = `https://github.com/${data.repoOwner}/${data.repoName}`;
   }
 }
 
+// 형식이 안 맞아도(비웠어도) 지금 입력창에 있는 값을 그대로 저장한다.
+// owner/repo(실제 커밋에 쓰이는 값)도 파싱 결과에 맞춰 항상 최신화하고,
+// 파싱에 실패하면 비워서 "미완료" 상태가 정확히 반영되게 한다.
 async function save() {
-  const parsed = parseRepoUrl(repoUrlEl.value);
+  const rawRepoUrl = repoUrlEl.value.trim();
+  const parsed = parseRepoUrl(rawRepoUrl);
+  const token = tokenEl.value.trim();
+  const branch = branchEl.value.trim() || "main";
+
+  await chrome.storage.local.set({
+    githubToken: token,
+    branch,
+    repoUrlDraft: rawRepoUrl,
+    repoOwner: parsed ? parsed.owner : "",
+    repoName: parsed ? parsed.repo : "",
+  });
+
   if (!parsed) {
-    showToast("저장소 주소 형식을 확인해주세요. 예: https://github.com/내계정/저장소이름", "err");
+    showToast("저장은 됐어요. 다만 저장소 주소 형식을 확인해주세요. 예: https://github.com/내계정/저장소이름", "err");
     return;
   }
-  if (!tokenEl.value.trim()) {
-    showToast("GitHub 토큰을 입력해주세요.", "err");
+  if (!token) {
+    showToast("저장은 됐어요. 다만 GitHub 토큰을 입력해주세요.", "err");
     return;
   }
 
-  await chrome.storage.local.set({
-    githubToken: tokenEl.value.trim(),
-    repoOwner: parsed.owner,
-    repoName: parsed.repo,
-    branch: branchEl.value.trim() || "main",
-  });
   showToast(`저장 완료: ${parsed.owner}/${parsed.repo}`, "ok");
 }
 

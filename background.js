@@ -24,6 +24,10 @@ function base64ToUtf8(b64) {
   return new TextDecoder().decode(bytes);
 }
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function getSettings() {
   const data = await chrome.storage.local.get([
     "githubToken",
@@ -56,10 +60,6 @@ async function getFile(settings, path) {
   if (!res.ok) throw new Error(`GitHub 조회 실패 (${res.status}): ${path}`);
   const json = await res.json();
   return { sha: json.sha, text: base64ToUtf8(json.content) };
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function putFile(settings, path, content, message, knownSha, retriesLeft = 4) {
@@ -108,10 +108,13 @@ function buildBasePath(run) {
   return `programmers/${getCategoryFolder(run)}/${folder}`;
 }
 
-async function ensureCategoryReadme(settings, run, message) {
+// 분류 폴더에 문제 폴더가 하나뿐이면 GitHub이 폴더 트리를 한 줄로 압축해서 보여주는데,
+// 파일을 하나 같이 두면 자식이 2개가 되어 이 압축 표시를 막을 수 있다. 내용 자체는
+// 의미가 없고 순전히 "폴더 안에 파일이 하나 더 있게" 만드는 용도다.
+async function ensureCategoryIndex(settings, run, message) {
   const categoryFolder = getCategoryFolder(run);
-  const path = `programmers/${categoryFolder}/README.md`;
-  const content = `### ${categoryFolder}\n`;
+  const path = `programmers/${categoryFolder}/index.json`;
+  const content = JSON.stringify({ category: categoryFolder }, null, 2) + "\n";
 
   const existing = await getFile(settings, path);
   if (existing && existing.text === content) return;
@@ -223,13 +226,7 @@ async function updateIndex(settings, run, basePath, message) {
   await putFile(settings, INDEX_PATH, JSON.stringify(nextEntries, null, 2), message, sha);
 
   const rootFile = await getFile(settings, ROOT_README_PATH);
-  await putFile(
-    settings,
-    ROOT_README_PATH,
-    buildRootReadme(nextEntries),
-    message,
-    rootFile?.sha
-  );
+  await putFile(settings, ROOT_README_PATH, buildRootReadme(nextEntries), message, rootFile?.sha);
 }
 
 const MAX_HISTORY = 30;
@@ -255,7 +252,7 @@ async function commitRun(run) {
   const actionLabel = run.action === "submit" ? "제출" : "실행";
   const message = `[${actionLabel}] ${run.title}`;
 
-  await ensureCategoryReadme(settings, run, message);
+  await ensureCategoryIndex(settings, run, message);
   await putFile(settings, readmePath, buildReadme(run), message);
   await putFile(settings, codePath, run.code || "", message);
   await updateIndex(settings, run, basePath, message);

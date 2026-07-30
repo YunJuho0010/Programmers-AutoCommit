@@ -1,7 +1,9 @@
 const enabledEl = document.getElementById("enabled");
+const commitTriggerEl = document.getElementById("commitTrigger");
 const emptyStateEl = document.getElementById("emptyState");
 const historyListEl = document.getElementById("historyList");
 const clearAllEl = document.getElementById("clearAll");
+const openOptionsEl = document.getElementById("openOptions");
 
 const STATUS_LABEL = {
   passed: "✅ 테스트 통과",
@@ -54,8 +56,21 @@ async function clearAllHistory() {
 }
 
 async function render() {
-  const { enabled } = await chrome.storage.local.get("enabled");
+  const { enabled, commitTrigger, githubToken, repoOwner, repoName } =
+    await chrome.storage.local.get([
+      "enabled",
+      "commitTrigger",
+      "githubToken",
+      "repoOwner",
+      "repoName",
+    ]);
   enabledEl.checked = enabled !== false;
+  commitTriggerEl.value = commitTrigger || "submit"; // 기본값 제출시
+
+  const isConfigured = Boolean(githubToken && repoOwner && repoName);
+  openOptionsEl.classList.toggle("configured", isConfigured);
+  openOptionsEl.classList.toggle("needs-setup", !isConfigured);
+  openOptionsEl.textContent = isConfigured ? "GitHub 연동됨" : "GitHub 연동 필요";
 
   const history = await getHistory();
 
@@ -79,9 +94,13 @@ enabledEl.addEventListener("change", () => {
   chrome.storage.local.set({ enabled: enabledEl.checked });
 });
 
+commitTriggerEl.addEventListener("change", () => {
+  chrome.storage.local.set({ commitTrigger: commitTriggerEl.value });
+});
+
 clearAllEl.addEventListener("click", clearAllHistory);
 
-document.getElementById("openOptions").addEventListener("click", (e) => {
+openOptionsEl.addEventListener("click", (e) => {
   e.preventDefault();
   chrome.runtime.openOptionsPage();
 });
