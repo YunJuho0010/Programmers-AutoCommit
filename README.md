@@ -5,8 +5,18 @@
 
 ## 설치
 
+### Chrome 웹 스토어에서 설치 (추천)
+
+**[Chrome 웹 스토어에서 설치하기](https://chromewebstore.google.com/detail/lbobnikhppipkdpnbmgciabkhbgcalbo?utm_source=item-share-cb)**
+
+위 링크에서 "Chrome에 추가"만 누르면 바로 사용할 수 있습니다.
+
+### 소스에서 직접 설치 (개발자용)
+
+최신 개발 버전을 미리 써보거나 코드를 직접 수정하고 싶다면:
+
 1. `chrome://extensions` 접속 → 우측 상단 "개발자 모드" 켜기
-2. "압축해제된 확장 프로그램을 로드합니다" 클릭 → 이 폴더(`programmers-autocommit`) 선택
+2. "압축해제된 확장 프로그램을 로드합니다" 클릭 → 이 저장소 폴더 선택
 
 ## 설정
 
