@@ -82,7 +82,7 @@ async function render() {
   const isConfigured = Boolean(githubToken && repoOwner && repoName);
   openOptionsEl.classList.toggle("configured", isConfigured);
   openOptionsEl.classList.toggle("needs-setup", !isConfigured);
-  openOptionsEl.textContent = isConfigured ? "GitHub 연동됨" : "GitHub 연동 필요";
+  openOptionsEl.textContent = isConfigured ? "GitHub 연동됨" : "GitHub 설정";
 
   const history = await getHistory();
 
@@ -119,7 +119,7 @@ openOptionsEl.addEventListener("click", (e) => {
 
 document.getElementById("openNotice").addEventListener("click", (e) => {
   e.preventDefault();
-  window.open(chrome.runtime.getURL("options.html#notice"));
+  window.open(chrome.runtime.getURL("notice.html"));
 });
 
 render();

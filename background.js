@@ -1,4 +1,4 @@
-// GitHub Contents API를 사용해 문제 README + 코드 파일을 커밋하고,
+// GitHub Git Data API를 사용해 문제 README + 코드 파일을 하나의 커밋으로 올리고,
 // 저장소 루트 README에 전체 풀이 현황을 요약해서 갱신하는 서비스 워커.
 
 const GITHUB_API = "https://api.github.com";
@@ -22,10 +22,6 @@ function base64ToUtf8(b64) {
   const binary = atob(b64.replace(/\s/g, ""));
   const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
   return new TextDecoder().decode(bytes);
-}
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function getSettings() {
@@ -62,36 +58,84 @@ async function getFile(settings, path) {
   return { sha: json.sha, text: base64ToUtf8(json.content) };
 }
 
-async function putFile(settings, path, content, message, knownSha, retriesLeft = 4) {
-  const sha = knownSha !== undefined ? knownSha : (await getFile(settings, path))?.sha;
-  const url = `${GITHUB_API}/repos/${settings.owner}/${settings.repo}/contents/${encodeURIComponent(
-    path
-  )}`;
-  const body = {
-    message,
-    content: utf8ToBase64(content),
-    branch: settings.branch,
-  };
-  if (sha) body.sha = sha;
+async function getBranchRef(settings) {
+  const url = `${GITHUB_API}/repos/${settings.owner}/${settings.repo}/git/ref/heads/${encodeURIComponent(settings.branch)}`;
+  const res = await fetch(url, { headers: githubHeaders(settings.token) });
+  if (!res.ok) throw new Error(`브랜치 조회 실패 (${res.status})`);
+  const json = await res.json();
+  return json.object.sha;
+}
 
+async function getCommitTree(settings, commitSha) {
+  const url = `${GITHUB_API}/repos/${settings.owner}/${settings.repo}/git/commits/${commitSha}`;
+  const res = await fetch(url, { headers: githubHeaders(settings.token) });
+  if (!res.ok) throw new Error(`커밋 조회 실패 (${res.status})`);
+  const json = await res.json();
+  return json.tree.sha;
+}
+
+async function createBlob(settings, content) {
+  const url = `${GITHUB_API}/repos/${settings.owner}/${settings.repo}/git/blobs`;
   const res = await fetch(url, {
-    method: "PUT",
+    method: "POST",
     headers: githubHeaders(settings.token),
-    body: JSON.stringify(body),
+    body: JSON.stringify({ content: utf8ToBase64(content), encoding: "base64" }),
   });
-  if (res.ok) return res.json();
+  if (!res.ok) throw new Error(`Blob 생성 실패 (${res.status})`);
+  const json = await res.json();
+  return json.sha;
+}
 
-  // 다른 커밋이 그 사이 같은 파일을 먼저 바꿔서 sha가 어긋난 경우(409),
-  // 잠깐 대기했다가 최신 sha를 다시 받아와서 재시도한다. 대기 시간을 매번 조금씩
-  // 늘려서(지수 백오프) 계속 겹치는 걸 줄인다.
-  if (res.status === 409 && retriesLeft > 0) {
-    await wait(200 + Math.random() * 200 * (5 - retriesLeft));
-    const fresh = await getFile(settings, path);
-    return putFile(settings, path, content, message, fresh?.sha, retriesLeft - 1);
-  }
+async function createTree(settings, baseTreeSha, treeItems) {
+  const url = `${GITHUB_API}/repos/${settings.owner}/${settings.repo}/git/trees`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: githubHeaders(settings.token),
+    body: JSON.stringify({ base_tree: baseTreeSha, tree: treeItems }),
+  });
+  if (!res.ok) throw new Error(`트리 생성 실패 (${res.status})`);
+  const json = await res.json();
+  return json.sha;
+}
 
-  const errText = await res.text();
-  throw new Error(`GitHub 커밋 실패 (${res.status}): ${errText}`);
+async function createCommit(settings, message, treeSha, parentSha) {
+  const url = `${GITHUB_API}/repos/${settings.owner}/${settings.repo}/git/commits`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: githubHeaders(settings.token),
+    body: JSON.stringify({ message, tree: treeSha, parents: [parentSha] }),
+  });
+  if (!res.ok) throw new Error(`커밋 생성 실패 (${res.status})`);
+  const json = await res.json();
+  return json.sha;
+}
+
+async function updateRef(settings, sha) {
+  const url = `${GITHUB_API}/repos/${settings.owner}/${settings.repo}/git/refs/heads/${encodeURIComponent(settings.branch)}`;
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: githubHeaders(settings.token),
+    body: JSON.stringify({ sha }),
+  });
+  if (!res.ok) throw new Error(`브랜치 갱신 실패 (${res.status})`);
+}
+
+async function batchCommit(settings, files, message) {
+  const headSha = await getBranchRef(settings);
+  const baseTreeSha = await getCommitTree(settings, headSha);
+
+  const treeItems = await Promise.all(
+    files.map(async (f) => ({
+      path: f.path,
+      mode: "100644",
+      type: "blob",
+      sha: await createBlob(settings, f.content),
+    }))
+  );
+
+  const newTreeSha = await createTree(settings, baseTreeSha, treeItems);
+  const newCommitSha = await createCommit(settings, message, newTreeSha, headSha);
+  await updateRef(settings, newCommitSha);
 }
 
 function safeFolderName(name) {
@@ -108,17 +152,14 @@ function buildBasePath(run) {
   return `programmers/${getCategoryFolder(run)}/${folder}`;
 }
 
-// 분류 폴더에 문제 폴더가 하나뿐이면 GitHub이 폴더 트리를 한 줄로 압축해서 보여주는데,
-// 파일을 하나 같이 두면 자식이 2개가 되어 이 압축 표시를 막을 수 있다. 내용 자체는
-// 의미가 없고 순전히 "폴더 안에 파일이 하나 더 있게" 만드는 용도다.
-async function ensureCategoryIndex(settings, run, message) {
+async function categoryIndexIfNeeded(settings, run) {
   const categoryFolder = getCategoryFolder(run);
   const path = `programmers/${categoryFolder}/index.json`;
   const content = JSON.stringify({ category: categoryFolder }, null, 2) + "\n";
 
   const existing = await getFile(settings, path);
-  if (existing && existing.text === content) return;
-  await putFile(settings, path, content, message, existing?.sha);
+  if (existing && existing.text === content) return null;
+  return { path, content };
 }
 
 function buildReadme(run) {
@@ -219,14 +260,15 @@ function buildRootReadme(entries) {
   ].join("\n");
 }
 
-async function updateIndex(settings, run, basePath, message) {
-  const { sha, entries } = await loadIndex(settings);
+function buildIndexFiles(entries, run, basePath) {
   const nextEntries = upsertEntry(entries, run, basePath);
-
-  await putFile(settings, INDEX_PATH, JSON.stringify(nextEntries, null, 2), message, sha);
-
-  const rootFile = await getFile(settings, ROOT_README_PATH);
-  await putFile(settings, ROOT_README_PATH, buildRootReadme(nextEntries), message, rootFile?.sha);
+  return {
+    nextEntries,
+    files: [
+      { path: INDEX_PATH, content: JSON.stringify(nextEntries, null, 2) },
+      { path: ROOT_README_PATH, content: buildRootReadme(nextEntries) },
+    ],
+  };
 }
 
 const MAX_HISTORY = 30;
@@ -252,10 +294,19 @@ async function commitRun(run) {
   const actionLabel = run.action === "submit" ? "제출" : "실행";
   const message = `[${actionLabel}] ${run.title}`;
 
-  await ensureCategoryIndex(settings, run, message);
-  await putFile(settings, readmePath, buildReadme(run), message);
-  await putFile(settings, codePath, run.code || "", message);
-  await updateIndex(settings, run, basePath, message);
+  const files = [];
+
+  const catFile = await categoryIndexIfNeeded(settings, run);
+  if (catFile) files.push(catFile);
+
+  files.push({ path: readmePath, content: buildReadme(run) });
+  files.push({ path: codePath, content: run.code || "" });
+
+  const { entries } = await loadIndex(settings);
+  const { files: indexFiles } = buildIndexFiles(entries, run, basePath);
+  files.push(...indexFiles);
+
+  await batchCommit(settings, files, message);
 
   await pushHistory({
     id: `${run.timestamp}-${run.lessonId}`,
