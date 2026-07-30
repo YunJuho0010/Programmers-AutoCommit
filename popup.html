@@ -187,6 +187,16 @@
   .options-btn.configured:hover { background: #e2f5e8; }
   .options-btn.needs-setup { background: var(--err-bg); color: var(--err); }
   .options-btn.needs-setup:hover { background: #fde3e3; }
+  .notice-link {
+    display: block;
+    text-align: center;
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--sub);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .notice-link:hover { color: var(--ink); text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -219,6 +229,7 @@
     <button type="button" id="clearAll" class="clear-all hidden">알림 지우기</button>
 
     <a href="#" id="openOptions" class="options-btn">GitHub 연동</a>
+    <a href="#" id="openNotice" class="notice-link">⚠️ 주의사항</a>
   </div>
   <script src="popup.js"></script>
 </body>

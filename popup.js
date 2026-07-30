@@ -117,4 +117,9 @@ openOptionsEl.addEventListener("click", (e) => {
   chrome.runtime.openOptionsPage();
 });
 
+document.getElementById("openNotice").addEventListener("click", (e) => {
+  e.preventDefault();
+  window.open(chrome.runtime.getURL("options.html#notice"));
+});
+
 render();
