@@ -32,7 +32,10 @@ function buildHistoryItem(entry) {
   dismissBtn.className = "dismiss-btn";
   dismissBtn.textContent = "×";
   dismissBtn.title = "이 기록 지우기";
-  dismissBtn.addEventListener("click", () => dismissEntry(entry.id));
+  dismissBtn.addEventListener("click", () => {
+    item.classList.add("removing");
+    item.addEventListener("transitionend", () => dismissEntry(entry.id), { once: true });
+  });
   item.appendChild(dismissBtn);
 
   return item;
@@ -51,8 +54,17 @@ async function dismissEntry(id) {
 }
 
 async function clearAllHistory() {
-  await chrome.storage.local.set({ runHistory: [] });
-  render();
+  const items = historyListEl.querySelectorAll(".history-item");
+  if (items.length === 0) {
+    await chrome.storage.local.set({ runHistory: [] });
+    render();
+    return;
+  }
+  items.forEach((el) => el.classList.add("removing"));
+  setTimeout(async () => {
+    await chrome.storage.local.set({ runHistory: [] });
+    render();
+  }, 200);
 }
 
 async function render() {

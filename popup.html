@@ -107,6 +107,7 @@
   .history-list {
     max-height: 220px;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -119,6 +120,11 @@
     line-height: 1.5;
     background: #f9fafb;
     border: 1px solid var(--line);
+    transition: transform 0.2s ease, opacity 0.2s ease;
+  }
+  .history-item.removing {
+    transform: translateX(120%);
+    opacity: 0;
   }
   .history-item.passed { background: var(--ok-bg); border-color: #bbf7d0; }
   .history-item.failed { background: #fff7ed; border-color: #fed7aa; }
